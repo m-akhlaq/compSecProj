@@ -1,7 +1,10 @@
-all: do
+.POSIX:
+.SUFFIXES:
 
-do: explorer.c
-	gcc explorer.c -o explorer
+CFLAGS = -std=gnu99
 
+all: explorer
+explorer: explorer.c
+	$(CC) explorer.c -o explorer $(CFLAGS)
 clean:
-	rm explorer
+	rm -f explorer
