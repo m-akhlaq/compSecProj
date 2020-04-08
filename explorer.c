@@ -164,9 +164,32 @@ int main(int argc, char const *argv[]) {
     char* pch = (char*)malloc(sizeof(char*)*100);
     strcpy(bufferCpy,buff);
     pch = strtok (bufferCpy," ");
-    while (pch != NULL){
 
+    int modifyCommandCounter = 0;
+    while (pch != NULL){
       //this is where we check for commands
+      if (modifyCommandCounter == 1){
+        //this means the last command was 'mod', modfy
+        modifyCommandCounter == 0;
+        if (pch == NULL || strlen(pch) == 0 ){
+          printf("Error opening the file.\n");
+        }
+        stayInText = 1;
+        char * dirPath = (char*)malloc(sizeof(char*)*1000);
+        strcpy(dirPath,ROOTDIR);
+        strcat(dirPath,currentUser);
+        strcat(dirPath,"/");
+        strcat(dirPath, pch);
+        enableRawMode();
+        initEditor();
+        editorOpen(dirPath);
+        editorSetStatusMessage("HELP: CTRL-S = save | Ctrl-Q = quit | Ctrl-F = find");
+        while (stayInText == 1) {
+          editorRefreshScreen();
+          editorProcessKeypress();
+        }
+
+      }
       if (strcmp(pch, "ls") == 0){
           list();
       }
@@ -181,10 +204,12 @@ int main(int argc, char const *argv[]) {
             editorProcessKeypress();
           }
       }
+      if (strcmp(pch, "mod") == 0){
+        modifyCommandCounter = 1;
+      }
 
     //this just goes through the string, space by space
     pch = strtok (NULL, " ");
-
     }
 
 
@@ -220,7 +245,12 @@ int main(int argc, char const *argv[]) {
 
   void list(){
     struct dirent *de;
-    DIR *dr = opendir(ROOTDIR);
+    char * dirPath = (char*)malloc(sizeof(char*)*1000);
+    strcpy(dirPath,ROOTDIR);
+    strcat(dirPath,currentUser);
+    strcat(dirPath,"/");
+
+    DIR *dr = opendir(dirPath);
     if (dr == NULL) {
        printf("Could not open current directory" );
     }
@@ -792,8 +822,12 @@ int main(int argc, char const *argv[]) {
     editorSelectSyntaxHighlight();
 
     FILE *fp = fopen(filename, "r");
-    if (!fp)
-      die("fopen");
+    if (!fp){
+      disableRawMode();
+      stayInText = 0;
+      printf("No such file exists\n" );
+      return;
+    }
 
     char *line = NULL;
     size_t linecap = 0;
@@ -826,8 +860,12 @@ int main(int argc, char const *argv[]) {
     strcat(dirPath,currentUser);
     strcat(dirPath,"/");
     strcat(dirPath, E.filename);
-
-    int fd = open(dirPath, O_RDWR | O_CREAT, 0644);
+    int fd = 0;
+    if (E.filename[0] == '.'){
+       fd = open(E.filename, O_RDWR | O_CREAT, 0644);
+    }else{
+       fd = open(dirPath, O_RDWR | O_CREAT, 0644);
+    }
     if (fd != -1) {
       if (ftruncate(fd, len) != -1) {
         if (write(fd, buf, len) == len) {
