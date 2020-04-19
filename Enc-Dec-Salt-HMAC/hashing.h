@@ -26,6 +26,9 @@ unsigned char* getFileData(int);
 /*Returns the contents of the file as a string without the HMAC*/
 unsigned char* getFileContentsWithoutHMAC(int);
 
+/*Similar to getFileContentsWithoutHMAC, but removes the HMAC from a string*/
+unsigned char* getStringWithoutHMAC(unsigned char*, unsigned);
+
 /*Generates and returns a salt
 NULL returned on error*/
 unsigned char* genSalt();
@@ -54,3 +57,6 @@ int addHMACToFile(int);
 
 /*Verifies the file contents with the HMAC, returns True on verified integrity and False on a hash-filetext mismatch*/
 int verifyHMAC(int);
+
+/*Similar to verifyHMAC but for a string, returns True on verified integrity and False on a hash-filetext mismatch*/
+int verifyHMACString(unsigned char*, unsigned);

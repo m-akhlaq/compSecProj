@@ -56,7 +56,6 @@ password * generatePasswordHash(char * pass, unsigned char * salt)
 }
 
 unsigned char* doSHA512(unsigned char* string){
-
 	EVP_MD_CTX * context;
 	const EVP_MD * md;
 	unsigned char* digest = (unsigned char*)malloc(HASH_SIZE);
@@ -175,37 +174,48 @@ unsigned char* getFileContentsWithoutHMAC(int fileDescriptor) {
 	unsigned char* data = getFileData(fileDescriptor); //with hash
 	if (data == NULL)
 		return 0;
-	int fileSize = lseek(fileDescriptor, 0, SEEK_END);
-	unsigned char* fileData = (unsigned char*)malloc(fileSize - HASH_SIZE * 2); //without hash
-	memcpy(fileData, data, fileSize - HASH_SIZE * 2);
+	unsigned fileSize = lseek(fileDescriptor, 0, SEEK_END);
+	unsigned char* fileData = getStringWithoutHMAC(data, fileSize);
 	free(data);
+	return fileData;
+}
+
+unsigned char * getStringWithoutHMAC(unsigned char * data, unsigned size){
+	unsigned char* fileData = (unsigned char*)malloc(size - HASH_SIZE * 2); //without hash
+	memcpy(fileData, data, size - HASH_SIZE * 2);
 	return fileData;
 }
 
 int verifyHMAC(int fileDescriptor)
 {
 	unsigned char* data = getFileData(fileDescriptor); //with hash
-	unsigned char* fileData = getFileContentsWithoutHMAC(fileDescriptor);
-	int fileSize = lseek(fileDescriptor, 0, SEEK_END);
-	unsigned char* newHMAC = doSHA512(fileData);
+	unsigned fileSize = lseek(fileDescriptor, 0, SEEK_END);
+	if (verifyHMACString(data, fileSize)) {
+		free(data);
+		return 1;
+	}
+	return 0;
+}
+
+int verifyHMACString(unsigned char* withHash, unsigned size){
+	unsigned char* noHash = getStringWithoutHMAC(withHash, size);
+	unsigned char* newHMAC = doSHA512(noHash);
 	unsigned char * hexDigest = (unsigned char*)malloc(HASH_SIZE * 2 + 1);
 	int x;
 	for (x = 0; x < HASH_SIZE; x++)
 		sprintf(hexDigest + (2 * x), "%02x", newHMAC[x]);
 
-	unsigned char oldHMAC[HASH_SIZE*2];
-	memcpy(oldHMAC, data+(fileSize - HASH_SIZE * 2), HASH_SIZE*2);
-	for (x = 0; x < HASH_SIZE*2; x++)
+	unsigned char oldHMAC[HASH_SIZE * 2];
+	memcpy(oldHMAC, withHash + (size - HASH_SIZE * 2), HASH_SIZE * 2);
+	for (x = 0; x < HASH_SIZE * 2; x++)
 		if (oldHMAC[x] != hexDigest[x]) {
 			free(hexDigest);
 			free(newHMAC);
-			free(fileData);
-			free(data);
+			free(noHash);
 			return 0;
 		}
 	free(hexDigest);
 	free(newHMAC);
-	free(fileData);
-	free(data);
+	free(noHash);
 	return 1;
 }

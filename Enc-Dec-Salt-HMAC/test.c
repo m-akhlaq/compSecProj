@@ -1,8 +1,8 @@
 #include <stdio.h>
-#include "hashing.h"
+#include "cryptography.h"
 
 int main(){
-	password* pass = generatePasswordHash("pass", NULL);
+	/*password* pass = generatePasswordHash("pass", NULL);
 	printf("Password: pass\nPassword hash: ");
 	printf("%s\n", pass->hash);
 	printf("Salt: ");
@@ -23,6 +23,32 @@ int main(){
 	printf("Check HMAC on unmodified file (testfile2.txt): %d\n", verifyHMAC(fd));
 	write(fd, " ", 1);
 	printf("Check HMAC on modified file (testfile2.txt): %d\n", verifyHMAC(fd));
+	close(fd);*/
+	int fd = open("testfile.txt", O_RDWR);
+	addHMACToFile(fd);
+	if (encryptToFile(fd) == 1) {
+		printf("testfile.txt Encrypted!\n");
+		crypto* data = genCryptoFromFile(fd);
+		unsigned char* dec = decryptString(data);
+		if (dec != NULL) {
+			printf("testfile.txt Decrypted!\n");
+			printf("%s\n", getStringWithoutHMAC(dec, strlen(dec)));
+			printf("HMAC Valid: %d\n", verifyHMACString(dec, strlen(dec)));
+		}
+	}
+	close(fd);
+	fd = open("testfile2.txt", O_RDWR);
+	addHMACToFile(fd);
+	if (encryptToFile(fd) == 1) {
+		printf("testfile2.txt Encrypted!\n");
+		crypto* data = genCryptoFromFile(fd);
+		unsigned char* dec = decryptString(data);
+		if (dec != NULL) {
+			printf("testfile2.txt Decrypted!\n");
+			printf("%s\n", getStringWithoutHMAC(dec, strlen(dec)));
+			printf("HMAC Valid: %d\n", verifyHMACString(dec, strlen(dec)));
+		}
+	}
 	close(fd);
 	return 0;
 }
