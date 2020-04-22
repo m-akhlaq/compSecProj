@@ -181,6 +181,8 @@ unsigned char* getFileContentsWithoutHMAC(int fileDescriptor) {
 }
 
 unsigned char * getStringWithoutHMAC(unsigned char * data, unsigned size){
+	if (size < (HASH_SIZE*2))
+		return NULL; //too small
 	unsigned char* fileData = (unsigned char*)malloc(size - HASH_SIZE * 2); //without hash
 	memcpy(fileData, data, size - HASH_SIZE * 2);
 	return fileData;
@@ -194,10 +196,13 @@ int verifyHMAC(int fileDescriptor)
 		free(data);
 		return 1;
 	}
+	free(data);
 	return 0;
 }
 
 int verifyHMACString(unsigned char* withHash, unsigned size){
+	if (size < (HASH_SIZE * 2))
+		return 0;
 	unsigned char* noHash = getStringWithoutHMAC(withHash, size);
 	unsigned char* newHMAC = doSHA512(noHash);
 	unsigned char * hexDigest = (unsigned char*)malloc(HASH_SIZE * 2 + 1);

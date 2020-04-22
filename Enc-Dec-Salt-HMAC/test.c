@@ -2,7 +2,7 @@
 #include "cryptography.h"
 
 int main(){
-	/*password* pass = generatePasswordHash("pass", NULL);
+	password* pass = generatePasswordHash("pass", NULL);
 	printf("Password: pass\nPassword hash: ");
 	printf("%s\n", pass->hash);
 	printf("Salt: ");
@@ -23,11 +23,15 @@ int main(){
 	printf("Check HMAC on unmodified file (testfile2.txt): %d\n", verifyHMAC(fd));
 	write(fd, " ", 1);
 	printf("Check HMAC on modified file (testfile2.txt): %d\n", verifyHMAC(fd));
-	close(fd);*/
+	close(fd);
 	int fd = open("testfile.txt", O_RDWR);
 	addHMACToFile(fd);
 	if (encryptToFile(fd) == 1) {
 		printf("testfile.txt Encrypted!\n");
+		//Enable these to simulate modifying the file
+		//lseek(fd, -5,SEEK_END);
+		//lseek(fd, 5, SEEK_SET);
+		//write(fd, "G", 1);
 		crypto* data = genCryptoFromFile(fd);
 		unsigned char* dec = decryptString(data);
 		if (dec != NULL) {

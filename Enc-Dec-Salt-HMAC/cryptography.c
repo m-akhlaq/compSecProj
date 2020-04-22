@@ -71,7 +71,7 @@ unsigned char * genRandBytes(int size){
 	}
 	free(encryption->IV);
 	free(encryption);
-	ERR_print_errors_fp(stderr);
+	//ERR_print_errors_fp(stderr);
 	return NULL;
 }
 
@@ -105,7 +105,7 @@ unsigned char * decryptString(crypto* data){
 			}
 		}
 	}
-	ERR_print_errors_fp(stderr);
+	//ERR_print_errors_fp(stderr);
 	return NULL;
 }
 
@@ -138,6 +138,8 @@ int encryptToFile(int fileDescriptor){
 crypto * genCryptoFromFile(int fileDescriptor){
 	unsigned char* fileData = getFileData(fileDescriptor);
 	int fileSize = lseek(fileDescriptor, 0, SEEK_END);
+	if (fileSize < ((HASH_SIZE*2)/AES_BLOCK_SIZE + IV_SIZE))
+		return NULL; //minimum size of file, accounted for no text, an HMAC, and IV
 	crypto* data = (crypto*)malloc(sizeof(crypto));
 	if (data == NULL)
 		return NULL;
