@@ -185,6 +185,8 @@ int main(int argc, char const *argv[]) {
     int viewCounter = 0;
     while (pch != NULL){
       //this is where we check for commands
+
+      ///this is the code for the cat command
       if (viewCounter == 1){
         viewCounter = 0;
         if (pch == NULL || strlen(pch) == 0 ){
@@ -202,6 +204,12 @@ int main(int argc, char const *argv[]) {
         }
         showFileText(dirPath);
       }
+
+      if (strcmp(pch, "cat") == 0){
+        viewCounter = 1;
+      }
+
+      ///this is the code for the mod command
       if (modifyCommandCounter == 1){
         //this means the last command was 'mod', modfy
         modifyCommandCounter = 0;
@@ -230,12 +238,25 @@ int main(int argc, char const *argv[]) {
           editorProcessKeypress();
         }
 
+
       }
+
+      if (strcmp(pch, "mod") == 0){
+        modifyCommandCounter = 1;
+      }
+
+      //this is the ls command
+
       if (strcmp(pch, "ls") == 0){
+        if(strcmp(currentUser, "root") == 0){
+          listAllFilesInAllDirs("./root", 0);
+        }else {
           list();
+        }
       }
+
       if(strcmp(pch, "addUser" ) == 0){
-          if(strcmp(currentUser, "root")){
+          if(strcmp(currentUser, "root") != 0){
             printf("ERROR. You can't add a new user since you are not the root.\n");
             return 0;
           }
@@ -257,12 +278,31 @@ int main(int argc, char const *argv[]) {
             editorProcessKeypress();
           }
       }
-      if (strcmp(pch, "mod") == 0){
-        modifyCommandCounter = 1;
+    if (strcmp(pch, "rm") == 0){
+      char * rmFilename;
+      rmFilename = strtok(NULL, " "); //user on same line in the command line will do addUser(), username, password.
+      char * dirPath = (char*)malloc(sizeof(char*)*1000);
+      if (strcmp(currentUser, "root") == 0){
+        strcpy(dirPath,ROOTDIR);
+        strcat(dirPath, rmFilename);
+      }else{
+        strcpy(dirPath,ROOTDIR);
+        strcat(dirPath,currentUser);
+        strcat(dirPath,"/");
+        strcat(dirPath, rmFilename);
       }
-      if (strcmp(pch, "cat") == 0){
-        viewCounter = 1;
-      }
+
+      int status = remove(dirPath);
+      if (status == 0)
+         printf("%s deleted\n", rmFilename);
+      else{
+         printf("Error deleting the file %s\n", dirPath );
+       }
+
+     }
+
+
+
 
     //this just goes through the string, space by space
     pch = strtok (NULL, " ");
@@ -298,6 +338,30 @@ int main(int argc, char const *argv[]) {
     buff[strlen(buff)-1] = '\0';
     return OK;
 }
+
+  void listAllFilesInAllDirs(const char *name, int fileOrDirIndentation)
+  {
+      DIR *directoryPointer;
+      struct dirent *direntEntry;
+
+      if (!(directoryPointer = opendir(name)))
+          return;
+
+      while ((direntEntry = readdir(directoryPointer)) != NULL) {
+          if (direntEntry->d_type == DT_DIR) {
+              char pathOfDirOrFile[1024];
+              if (strcmp(direntEntry->d_name, ".") == 0 || strcmp(direntEntry->d_name, "..") == 0)
+                  continue;
+               snprintf(pathOfDirOrFile, sizeof(pathOfDirOrFile), "%s/%s", name, direntEntry->d_name);
+              printf("%*s[%s]\n", fileOrDirIndentation, "", direntEntry->d_name);
+               listAllFilesInAllDirs(pathOfDirOrFile, fileOrDirIndentation + 2);
+          } else {
+              printf("%*s- %s\n", fileOrDirIndentation, "", direntEntry->d_name); //May need to uncomment this line for debugging if needed.
+          }
+      }
+      closedir(directoryPointer);
+  }
+
 
   void list(){
     struct dirent *de;
@@ -391,6 +455,11 @@ int main(int argc, char const *argv[]) {
     fwrite(buffer, 1, strlen(buffer), f);
     free(buffer);
     fclose(f);
+    char * dirPath = (char*)malloc(sizeof(char*)*1000);
+    strcpy(dirPath,ROOTDIR);
+    strcat(dirPath, username);
+    mkdir(dirPath, 0777);
+    printf("%s added to the system.\n",username );
   }
 
 
@@ -913,6 +982,13 @@ int main(int argc, char const *argv[]) {
           close(fd);
           return;
         }
+        if (!verifyHMACString(dec, strlen(dec))){
+          disableRawMode();
+          char secondBuff[50];
+          //this function get the command and makes sure everything is fine
+          getLine ("This file has been modified by someone other than you. Hit enter to continue  ", secondBuff, sizeof(secondBuff));
+          enableRawMode();
+        }
         close(fd);
 
         FILE *stream;
@@ -962,6 +1038,8 @@ int main(int argc, char const *argv[]) {
     if (strcmp(currentUser, "root") == 0){
         unsigned char* fileData = getFileData(fd);
         printf("%s\n",fileData);
+        close(fd);
+        return;
     }else{
       crypto* data = genCryptoFromFile(fd);
       unsigned char* dec = decryptString(data);
@@ -980,8 +1058,9 @@ int main(int argc, char const *argv[]) {
 		  //printf("\n%s\n", dec);
 	  }*/
 	  if (!verifyHMACString(dec, strlen(dec)))
-		  printf("This file is not authentic!\n");
-      unsigned char* actualText = getStringWithoutHMAC(dec, strlen(dec));
+		  printf("This file has been modified by someone other than you!\n");
+
+    unsigned char* actualText = getStringWithoutHMAC(dec, strlen(dec));
       //printf("User level file contents: %s\n",actualText);
 	  printf("%s", actualText);
   }
@@ -1015,7 +1094,7 @@ int main(int argc, char const *argv[]) {
       if (ftruncate(fd, len) != -1) {
         if (write_(fd, buf, len) == len) {
 
-			//Ensure HMAC is added AFTER \n 
+			//Ensure HMAC is added AFTER \n
 			char check;
 			lseek(fd, -1, SEEK_END);
 			read_(fd, &check, 1);
