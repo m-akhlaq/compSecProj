@@ -183,8 +183,9 @@ unsigned char* getFileContentsWithoutHMAC(int fileDescriptor) {
 unsigned char * getStringWithoutHMAC(unsigned char * data, unsigned size){
 	if (size < (HASH_SIZE*2))
 		return NULL; //too small
-	unsigned char* fileData = (unsigned char*)malloc(size - HASH_SIZE * 2); //without hash
+	unsigned char* fileData = (unsigned char*)malloc(size - HASH_SIZE * 2 + 1); //without hash
 	memcpy(fileData, data, size - HASH_SIZE * 2);
+	*(fileData + (size - HASH_SIZE * 2)) = '\0';
 	return fileData;
 }
 

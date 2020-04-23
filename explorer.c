@@ -1,17 +1,4 @@
-#include <ctype.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <time.h>
-#include <unistd.h>
-#include "dirent.h"
-
-
+#include "explorer.h"
 
 #define OK       0
 #define NO_INPUT 1
@@ -124,6 +111,35 @@ char *editorPrompt(char *prompt, void (*callback)(char *, int));
 int stayInText = 1;
 
 
+//correct read/write for low level functions
+
+//#define read(fd, buf, size) read_(fd, buf, size)
+//#define write(fd, buf, size) write_(fd, buf, size)
+
+ssize_t write_(int fd, void* buf, size_t size) {
+	unsigned offset = 0, remaining = size;
+	while (remaining > 0) {
+		int ret = write(fd, buf + offset, remaining);
+		if (ret < 0)
+			return -1;
+		remaining -= ret;
+		offset += ret;
+	}
+	return size;
+}
+ssize_t read_(int fd, void* buf, size_t size) {
+	unsigned remaining = size, offset = 0;
+	while (remaining > 0) {
+		int ret = read(fd, buf + offset, remaining);
+		if (ret < 0)
+			return NULL;
+		remaining -= ret;
+		offset += ret;
+	}
+	return size;
+}
+
+
 int main(int argc, char const *argv[]) {
 
   // Loads in user by their username
@@ -166,20 +182,45 @@ int main(int argc, char const *argv[]) {
     pch = strtok (bufferCpy," ");
 
     int modifyCommandCounter = 0;
+    int viewCounter = 0;
     while (pch != NULL){
       //this is where we check for commands
+      if (viewCounter == 1){
+        viewCounter = 0;
+        if (pch == NULL || strlen(pch) == 0 ){
+          printf("Error opening the file.\n");
+        }
+        char * dirPath = (char*)malloc(sizeof(char*)*1000);
+        if (strcmp(currentUser, "root") == 0){
+          strcpy(dirPath,ROOTDIR);
+          strcat(dirPath, pch);
+        }else{
+          strcpy(dirPath,ROOTDIR);
+          strcat(dirPath,currentUser);
+          strcat(dirPath,"/");
+          strcat(dirPath, pch);
+        }
+        showFileText(dirPath);
+      }
       if (modifyCommandCounter == 1){
         //this means the last command was 'mod', modfy
-        modifyCommandCounter == 0;
+        modifyCommandCounter = 0;
         if (pch == NULL || strlen(pch) == 0 ){
           printf("Error opening the file.\n");
         }
         stayInText = 1;
         char * dirPath = (char*)malloc(sizeof(char*)*1000);
-        strcpy(dirPath,ROOTDIR);
-        strcat(dirPath,currentUser);
-        strcat(dirPath,"/");
-        strcat(dirPath, pch);
+        if (strcmp(currentUser, "root") == 0){
+          strcpy(dirPath,ROOTDIR);
+          strcat(dirPath, pch);
+        }else{
+          strcpy(dirPath,ROOTDIR);
+          strcat(dirPath,currentUser);
+          strcat(dirPath,"/");
+          strcat(dirPath, pch);
+        }
+
+
         enableRawMode();
         initEditor();
         editorOpen(dirPath);
@@ -193,12 +234,24 @@ int main(int argc, char const *argv[]) {
       if (strcmp(pch, "ls") == 0){
           list();
       }
+      if(strcmp(pch, "addUser" ) == 0){
+          if(strcmp(currentUser, "root")){
+            printf("ERROR. You can't add a new user since you are not the root.\n");
+            return 0;
+          }
+          char *user;
+          char *newPassword;
+
+          user = strtok(NULL, " "); //user on same line in the command line will do addUser(), username, password.
+          newPassword = strtok(NULL, " ");
+          addUser(user, newPassword);
+      }
+
       if (strcmp(pch, "new") == 0){
           stayInText = 1;
           enableRawMode();
           initEditor();
           editorSetStatusMessage("HELP: CTRL-S = save | Ctrl-Q = quit | Ctrl-F = find");
-
           while (stayInText == 1) {
             editorRefreshScreen();
             editorProcessKeypress();
@@ -206,6 +259,9 @@ int main(int argc, char const *argv[]) {
       }
       if (strcmp(pch, "mod") == 0){
         modifyCommandCounter = 1;
+      }
+      if (strcmp(pch, "cat") == 0){
+        viewCounter = 1;
       }
 
     //this just goes through the string, space by space
@@ -261,7 +317,10 @@ int main(int argc, char const *argv[]) {
     closedir(dr);
   }
 
-    int checkCredentials(char* username, char* password){
+    int checkCredentials(char* username, char* pword){
+      if (strcmp(username, "root") == 0 && strcmp(pword, "root") == 0 ){
+        return 1;
+      }
       char * buffer = 0;
       long length;
       FILE * f = fopen (USERS, "rb");
@@ -283,7 +342,7 @@ int main(int argc, char const *argv[]) {
         char* commaSeperatedValues = (char*)malloc(sizeof(char*)*(length+1));
         strcpy(bufferCpy,buffer);
         char *end_str;
-        char *token = strtok_r(bufferCpy, ",", &end_str);
+        char *token = strtok_r(bufferCpy, "\n", &end_str);
         while (token != NULL){
           char *end_token;
           char *token2 = strtok_r(token, ":", &end_token);
@@ -293,31 +352,53 @@ int main(int argc, char const *argv[]) {
             if (counter == 0 && strcmp(username,token2) == 0){
               usernameFound= 1;
             }
-            if (counter == 1 && usernameFound == 1 && strcmp(password,token2) == 0){
-              //both username and password match. return 1;
-              return 1;
+            if (counter == 1 && usernameFound == 1){
+              password * pair = (password*)malloc(sizeof(password));
+              pair->salt = (unsigned char*)malloc(SALT_SIZE * 2);
+              pair->hash = (unsigned char*)malloc(HASH_SIZE * 2);
+              strcpy(pair->hash, token2);
+              token2 = strtok_r(NULL, ":", &end_token);
+              strcpy(pair->salt, token2);
+              if (verifyPassword(pword, pair) == 1){
+                return 1;
+              }else{
+                return 0;
+              }
             }
             token2 = strtok_r(NULL, ":", &end_token);
             counter++;
           }
-          token = strtok_r(NULL, ",", &end_str);
+          token = strtok_r(NULL, "\n", &end_str);
         }
 
         return 0;
 
-
-
-
       }
 
+  }
+
+  int addUser(char* username, char* pword){
+    FILE *f = fopen(USERS, "ab"); //append binary = ab
+    char * buffer = malloc(1024 *sizeof(char));
+    buffer[0] = '\0'; //buffer now a vaild C string
+    password * pass = generatePasswordHash(pword, NULL);
+    strcpy(buffer, username);
+    strcat(buffer, ":");
+    strcat(buffer, pass->hash);
+    strcat(buffer, ":");
+    strcat(buffer, pass->salt);
+    strcat(buffer, "\n"); //going to add the new username and password.
+    fwrite(buffer, 1, strlen(buffer), f);
+    free(buffer);
+    fclose(f);
   }
 
 
   /*** terminal ***/
 
   void die(const char *s) {
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    write_(STDOUT_FILENO, "\x1b[2J", 4);
+    write_(STDOUT_FILENO, "\x1b[H", 3);
     perror(s);
     exit(1);
   }
@@ -347,7 +428,7 @@ int main(int argc, char const *argv[]) {
   int editorReadKey() {
     int nread;
     char c;
-    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+    while ((nread = read_(STDIN_FILENO, &c, 1)) != 1) {
       if (nread == -1 && errno != EAGAIN)
         die("read");
     }
@@ -355,14 +436,14 @@ int main(int argc, char const *argv[]) {
     if (c == '\x1b') {
       char seq[3];
 
-      if (read(STDIN_FILENO, &seq[0], 1) != 1)
+      if (read_(STDIN_FILENO, &seq[0], 1) != 1)
         return '\x1b';
-      if (read(STDIN_FILENO, &seq[1], 1) != 1)
+      if (read_(STDIN_FILENO, &seq[1], 1) != 1)
         return '\x1b';
 
       if (seq[0] == '[') {
         if (seq[1] >= '0' && seq[1] <= '9') {
-          if (read(STDIN_FILENO, &seq[2], 1) != 1)
+          if (read_(STDIN_FILENO, &seq[2], 1) != 1)
             return '\x1b';
           if (seq[2] == '~') {
             switch (seq[1]) {
@@ -417,11 +498,11 @@ int main(int argc, char const *argv[]) {
     char buf[32];
     unsigned int i = 0;
 
-    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
+    if (write_(STDOUT_FILENO, "\x1b[6n", 4) != 4)
       return -1;
 
     while (i < sizeof(buf) - 1) {
-      if (read(STDIN_FILENO, &buf[i], 1) != 1)
+      if (read_(STDIN_FILENO, &buf[i], 1) != 1)
         break;
       if (buf[i] == 'R')
         break;
@@ -441,7 +522,7 @@ int main(int argc, char const *argv[]) {
     struct winsize ws;
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-      if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
+      if (write_(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
         return -1;
       return getCursorPosition(rows, cols);
     } else {
@@ -816,32 +897,96 @@ int main(int argc, char const *argv[]) {
   }
 
   void editorOpen(char *filename) {
+      free(E.filename);
+      E.filename = strdup(filename);
+
+      editorSelectSyntaxHighlight();
+
+      if (strcmp(currentUser, "root") != 0){
+        int fd = open(filename, O_RDWR);
+        crypto* data = genCryptoFromFile(fd);
+        unsigned char* dec = decryptString(data);
+        if (dec == NULL){
+          disableRawMode();
+          stayInText = 0;
+          printf("This file was modfied by a source other than you. Its encryption has been corrupted.  \n" );
+          close(fd);
+          return;
+        }
+        close(fd);
+
+        FILE *stream;
+        stream = fmemopen(dec, strlen (dec), "r");
+
+        char *line = NULL;
+        size_t linecap = 0;
+        ssize_t linelen;
+        while ((linelen = getline(&line, &linecap, stream)) != -1) {
+          while (linelen > 0 &&
+                 (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
+            linelen--;
+          editorInsertRow(E.numrows, line, linelen);
+        }
+
+        free(line);
+        close(stream);
+        E.dirty = 0;
+        E.numrows = E.numrows - 1;
+    }else{
+      int fd = open(filename, O_RDWR);
+      unsigned char* fileData = getFileData(fd);
+      FILE *stream;
+      stream = fmemopen(fileData, strlen (fileData), "r");
+      char *line = NULL;
+      size_t linecap = 0;
+      ssize_t linelen;
+      while ((linelen = getline(&line, &linecap, stream)) != -1) {
+        while (linelen > 0 &&
+               (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
+          linelen--;
+        editorInsertRow(E.numrows, line, linelen);
+      }
+
+      free(line);
+      close(stream);
+      E.dirty = 0;
+      E.numrows = E.numrows - 1;
+    }
+
+  }
+
+  void showFileText(char *filename) {
     free(E.filename);
     E.filename = strdup(filename);
-
-    editorSelectSyntaxHighlight();
-
-    FILE *fp = fopen(filename, "r");
-    if (!fp){
-      disableRawMode();
-      stayInText = 0;
-      printf("No such file exists\n" );
-      return;
-    }
-
-    char *line = NULL;
-    size_t linecap = 0;
-    ssize_t linelen;
-    while ((linelen = getline(&line, &linecap, fp)) != -1) {
-      while (linelen > 0 &&
-             (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
-        linelen--;
-      editorInsertRow(E.numrows, line, linelen);
-    }
-    free(line);
-    fclose(fp);
-    E.dirty = 0;
+    int fd = open(filename, O_RDWR);
+    if (strcmp(currentUser, "root") == 0){
+        unsigned char* fileData = getFileData(fd);
+        printf("%s\n",fileData);
+    }else{
+      crypto* data = genCryptoFromFile(fd);
+      unsigned char* dec = decryptString(data);
+      if (dec == NULL){
+        printf("The file has been modified by someone other than you. Unable to open \n");
+        close(fd);
+        return;
+      }
+      close(fd);
+	  //printf("Raw file contents: %s\n", dec);
+	  /*if (*(dec + strlen(dec) - 1) == '!') {
+		  printf("Caught bad write! Comment me out in the final version of this program!\n");
+		  int dec_len = strlen(dec);
+		  dec = (unsigned char*)realloc(dec, dec_len);
+		  *(dec + dec_len - 1) = '\0';
+		  //printf("\n%s\n", dec);
+	  }*/
+	  if (!verifyHMACString(dec, strlen(dec)))
+		  printf("This file is not authentic!\n");
+      unsigned char* actualText = getStringWithoutHMAC(dec, strlen(dec));
+      //printf("User level file contents: %s\n",actualText);
+	  printf("%s", actualText);
   }
+  }
+
 
   void editorSave() {
     if (E.filename == NULL) {
@@ -868,11 +1013,31 @@ int main(int argc, char const *argv[]) {
     }
     if (fd != -1) {
       if (ftruncate(fd, len) != -1) {
-        if (write(fd, buf, len) == len) {
+        if (write_(fd, buf, len) == len) {
+
+			//Ensure HMAC is added AFTER \n 
+			char check;
+			lseek(fd, -1, SEEK_END);
+			read_(fd, &check, 1);
+			if (check != '\n')
+				write_(fd, '\n', 1);
+
+          addHMACToFile(fd);
+          if (encryptToFile(fd) == 1){
+            crypto* data = genCryptoFromFile(fd);
+            unsigned char* dec = decryptString(data);
+
+            if (verifyHMACString(dec, strlen(dec)) == 0){
+              editorSetStatusMessage("File was corrputed while writing");
+            }else{
+            editorSetStatusMessage("%d bytes written to disk", len);
+            }
+          }else{
+            editorSetStatusMessage("Something went wrong with the encryption process. Please try again");
+          }
           close(fd);
           free(buf);
           E.dirty = 0;
-          editorSetStatusMessage("%d bytes written to disk", len);
           return;
         }
       }
@@ -1121,7 +1286,7 @@ int main(int argc, char const *argv[]) {
     abAppend(&ab, buf, strlen(buf));
 
     abAppend(&ab, "\x1b[?25h", 6);
-    write(STDOUT_FILENO, ab.b, ab.len);
+    write_(STDOUT_FILENO, ab.b, ab.len);
     abFree(&ab);
   }
 
@@ -1232,8 +1397,8 @@ int main(int argc, char const *argv[]) {
         quit_times--;
         return;
       }
-      write(STDOUT_FILENO, "\x1b[2J", 4);
-      write(STDOUT_FILENO, "\x1b[H", 3);
+      write_(STDOUT_FILENO, "\x1b[2J", 4);
+      write_(STDOUT_FILENO, "\x1b[H", 3);
       disableRawMode();
       stayInText = 0;
       break;

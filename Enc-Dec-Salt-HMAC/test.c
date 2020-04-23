@@ -24,7 +24,7 @@ int main(){
 	write(fd, " ", 1);
 	printf("Check HMAC on modified file (testfile2.txt): %d\n", verifyHMAC(fd));
 	close(fd);
-	int fd = open("testfile.txt", O_RDWR);
+	fd = open("testfile.txt", O_RDWR);
 	addHMACToFile(fd);
 	if (encryptToFile(fd) == 1) {
 		printf("testfile.txt Encrypted!\n");
@@ -45,6 +45,8 @@ int main(){
 	addHMACToFile(fd);
 	if (encryptToFile(fd) == 1) {
 		printf("testfile2.txt Encrypted!\n");
+		close(fd);
+		fd = open("testfile2.txt", O_RDWR);
 		crypto* data = genCryptoFromFile(fd);
 		unsigned char* dec = decryptString(data);
 		if (dec != NULL) {
